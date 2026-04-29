@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Намир Групп — Сургалтын систем</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/msal.js/2.38.3/msal-browser.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -63,7 +62,7 @@
 <div class="card">
   <h1>Намир Групп</h1>
   <p class="subtitle">Сургалтын системд нэвтрэх</p>
-
+ 
   <button class="ms-btn" onclick="login()">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21">
       <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
@@ -73,22 +72,17 @@
     </svg>
     Microsoft акаунтаар нэвтрэх
   </button>
-
+ 
   <div class="loading" id="loading">⏳ Нэвтэрч байна...</div>
   <div class="error" id="error"></div>
   <div class="footer">Намир Групп © 2026</div>
 </div>
-
+ 
 <script>
-const msalConfig = {
-  auth: {
-    clientId: "5e1907e1-bb7d-4fca-a25e-eae236abd290",
-    authority: "https://login.microsoftonline.com/97db511a-8405-4054-8686-b2ee778939d6",
-    redirectUri: window.location.href.split('?')[0]
-  },
-  cache: { cacheLocation: "sessionStorage" }
-};
-
+const CLIENT_ID  = "5e1907e1-bb7d-4fca-a25e-eae236abd290";
+const TENANT_ID  = "97db511a-8405-4054-8686-b2ee778939d6";
+const REDIRECT   = "https://namir536.github.io/Namir/";
+ 
 const branchMap = {
   "novatek.mn"       : "engineering",
   "domus.mn"         : "engineering",
@@ -111,34 +105,75 @@ const branchMap = {
   "snowball.am"      : "namir",
   "blackswan.global" : "namir"
 };
-
-const msalInstance = new msal.PublicClientApplication(msalConfig);
-
-async function login() {
-  document.getElementById("loading").style.display = "block";
-  document.getElementById("error").style.display = "none";
+ 
+// JWT decode - email авах
+function parseJwt(token) {
   try {
-    const result = await msalInstance.loginPopup({ scopes: ["User.Read"] });
-    const email = result.account.username.toLowerCase();
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(atob(base64).split('').map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    return JSON.parse(json);
+  } catch(e) { return null; }
+}
+ 
+// Microsoft-аас буцаж ирсэн token шалгах
+function checkToken() {
+  const hash = window.location.hash.substring(1);
+  if (!hash) return;
+ 
+  const params = {};
+  hash.split('&').forEach(p => {
+    const [k, v] = p.split('=');
+    params[k] = decodeURIComponent(v);
+  });
+ 
+  if (params.id_token) {
+    document.getElementById("loading").style.display = "block";
+    const payload = parseJwt(params.id_token);
+    if (!payload) {
+      showError("Token уншихад алдаа гарлаа.");
+      return;
+    }
+ 
+    const email = (payload.preferred_username || payload.email || "").toLowerCase();
     const domain = email.split("@")[1];
     const branch = branchMap[domain];
+ 
     if (branch) {
       window.location.href = "https://" + branch + "-namirgroup.talentlms.com/index/login/sso:1";
     } else {
       document.getElementById("loading").style.display = "none";
-      const err = document.getElementById("error");
-      err.textContent = "Домэйн танигдсангүй: " + domain + ". Удирдлагатайгаа холбоо барина уу.";
-      err.style.display = "block";
+      showError("Домэйн танигдсангүй: " + domain + ". Удирдлагатайгаа холбоо барина уу.");
     }
-  } catch(e) {
-    document.getElementById("loading").style.display = "none";
-    const err = document.getElementById("error");
-    err.textContent = "Нэвтрэхэд алдаа гарлаа. Дахин оролдоно уу.";
-    err.style.display = "block";
+ 
+    // Hash цэвэрлэх
+    history.replaceState(null, '', window.location.pathname);
+  }
+ 
+  if (params.error) {
+    showError("Алдаа: " + (params.error_description || params.error));
   }
 }
-
-msalInstance.handleRedirectPromise().catch(() => {});
+ 
+function showError(msg) {
+  const err = document.getElementById("error");
+  err.textContent = msg;
+  err.style.display = "block";
+}
+ 
+function login() {
+  const url = "https://login.microsoftonline.com/" + TENANT_ID + "/oauth2/v2.0/authorize" +
+    "?client_id=" + CLIENT_ID +
+    "&response_type=id_token" +
+    "&redirect_uri=" + encodeURIComponent(REDIRECT) +
+    "&scope=openid%20profile%20email" +
+    "&response_mode=fragment" +
+    "&nonce=" + Math.random().toString(36).substring(2);
+  window.location.href = url;
+}
+ 
+// Хуудас ачаалагдахад token шалгах
+checkToken();
 </script>
 </body>
 </html>
